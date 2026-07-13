@@ -1,6 +1,6 @@
 // api/refine.js
 // This runs on Vercel's servers, not in the browser — so your API key stays hidden.
-// Uses Google's Gemini API (free tier, no card required for AI Studio keys).
+// Uses Groq's free API (OpenAI-compatible format, no card required).
 
 export default async function handler(req, res) {
   // Allow requests from any origin (so your HTML page can call this)
@@ -28,36 +28,30 @@ Respond ONLY with valid JSON, no markdown fences, no preamble, in this exact sha
 {"refined_email": "the full rewritten email as plain text, no subject line needed", "notes": "1-2 short sentences on the key changes you made and why, written directly to the user"}`;
 
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
-    const response = await fetch(url, {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+      },
       body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { text: `${systemPrompt}\n\nTone: ${tone || 'Direct and confident'}\n\nDraft email:\n${draft}` }
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 1000
-        }
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 1000,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Tone: ${tone || 'Direct and confident'}\n\nDraft email:\n${draft}` }
+        ]
       })
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error('Gemini API error:', errText);
+      console.error('Groq API error:', errText);
       return res.status(502).json({ error: 'Upstream API error.' });
     }
 
     const data = await response.json();
-    const textBlock = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const textBlock = data.choices?.[0]?.message?.content;
     if (!textBlock) {
       return res.status(502).json({ error: 'No text returned from model.' });
     }
