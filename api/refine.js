@@ -22,10 +22,18 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing draft email text.' });
   }
 
-  const systemPrompt = `You are a cold email refinement tool. The user will paste a rough draft cold email and a desired tone. Rewrite it to be clear, tightly structured (short paragraphs, one clear call-to-action), and effective for cold outreach — never robotic or over-salesy. Preserve the sender's original intent, facts, and key details exactly; do not invent new claims, names, or numbers. Keep length close to the original unless it's clearly too long or too short.
+  const systemPrompt = `You are a cold email refinement tool. The user will paste a rough draft cold email and a desired tone.
+
+Do two things:
+
+1. Rewrite the email to be clear, tightly structured (short paragraphs, one clear call-to-action), and effective for cold outreach. Preserve the sender's original voice, phrasing, and key details as much as possible — do not flatten it into generic, overly-polished "AI voice." Only tighten structure, fix awkward phrasing, and soften anything that reads as pushy or robotic. Do not invent new claims, names, or numbers. Keep length close to the original unless it's clearly too long or too short.
+
+2. Score the ORIGINAL draft's "spamminess" — how robotic, aggressive, or salesy it would feel to a real recipient — on a 1-10 scale (1 = feels human and low-pressure, 10 = feels like obvious spam/aggressive sales copy). List up to 4 specific phrases from the original draft that most contribute to that score, with a short reason for each.
 
 Respond ONLY with valid JSON, no markdown fences, no preamble, in this exact shape:
-{"refined_email": "the full rewritten email as plain text, no subject line needed", "notes": "1-2 short sentences on the key changes you made and why, written directly to the user"}`;
+{"refined_email": "the full rewritten email as plain text, no subject line needed", "notes": "1-2 short sentences on the key changes you made and why, written directly to the user", "spam_score": 4, "flagged_phrases": [{"phrase": "exact phrase from the original draft", "reason": "short reason this reads as spammy or pushy"}]}
+
+If the draft has no spammy phrases, return an empty array for flagged_phrases and a low score.`;
 
   try {
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -61,7 +69,6 @@ Respond ONLY with valid JSON, no markdown fences, no preamble, in this exact sha
     try {
       parsed = JSON.parse(cleaned);
     } catch (parseErr) {
-      // Fallback: if the model didn't return clean JSON, just send the raw text back
       parsed = { refined_email: cleaned, notes: '' };
     }
 
