@@ -171,6 +171,79 @@
   .result-card.show { display: block; animation: fadeUp 0.35s ease; }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
+  .spam-card {
+    margin-top: 20px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface);
+    overflow: hidden;
+    display: none;
+    box-shadow: 0 1px 2px rgba(20,23,31,0.04), 0 8px 24px rgba(20,23,31,0.03);
+  }
+  .spam-card.show { display: block; animation: fadeUp 0.35s ease; }
+
+  .spam-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .spam-score-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 999px;
+  }
+  .spam-score-badge.low { background: #E6F7EF; color: var(--success); }
+  .spam-score-badge.mid { background: #FFF4E0; color: #B4740A; }
+  .spam-score-badge.high { background: #FDEDED; color: #A32D2D; }
+
+  .spam-meter {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--border);
+    margin: 0 20px 16px;
+    overflow: hidden;
+  }
+  .spam-meter-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.4s ease;
+  }
+  .spam-meter-fill.low { background: var(--success); }
+  .spam-meter-fill.mid { background: #E0A200; }
+  .spam-meter-fill.high { background: #D64545; }
+
+  .flagged-list { padding: 0 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+  .flagged-item {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .flagged-phrase {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 0 0 3px;
+  }
+  .flagged-reason {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    margin: 0;
+    line-height: 1.5;
+  }
+  .no-flags {
+    padding: 0 20px 20px;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+
   .result-header {
     display: flex;
     justify-content: space-between;
@@ -273,6 +346,15 @@
 
   <div class="error-box" id="errorBox"></div>
 
+  <div class="spam-card" id="spamCard">
+    <div class="spam-header">
+      <div class="field-label" style="margin:0;">Original draft — spam check</div>
+      <div class="spam-score-badge" id="spamBadge"></div>
+    </div>
+    <div class="spam-meter"><div class="spam-meter-fill" id="spamMeterFill"></div></div>
+    <div class="flagged-list" id="flaggedList"></div>
+  </div>
+
   <div class="result-card" id="resultCard">
     <div class="result-header">
       <div class="field-label" style="margin:0;">Refined version</div>
@@ -303,6 +385,49 @@
   const resultNotes = document.getElementById('resultNotes');
   const errorBox = document.getElementById('errorBox');
   const copyBtn = document.getElementById('copyBtn');
+  const spamCard = document.getElementById('spamCard');
+  const spamBadge = document.getElementById('spamBadge');
+  const spamMeterFill = document.getElementById('spamMeterFill');
+  const flaggedList = document.getElementById('flaggedList');
+
+  function renderSpamCheck(score, flagged) {
+    if (typeof score !== 'number') {
+      spamCard.classList.remove('show');
+      return;
+    }
+    const pct = Math.max(0, Math.min(10, score)) * 10;
+    let tier = 'low';
+    if (score >= 7) tier = 'high';
+    else if (score >= 4) tier = 'mid';
+
+    spamBadge.className = 'spam-score-badge ' + tier;
+    spamBadge.textContent = score + '/10 spam risk';
+    spamMeterFill.className = 'spam-meter-fill ' + tier;
+    spamMeterFill.style.width = pct + '%';
+
+    flaggedList.innerHTML = '';
+    if (flagged && flagged.length > 0) {
+      flagged.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'flagged-item';
+        const p = document.createElement('p');
+        p.className = 'flagged-phrase';
+        p.textContent = '"' + item.phrase + '"';
+        const r = document.createElement('p');
+        r.className = 'flagged-reason';
+        r.textContent = item.reason;
+        div.appendChild(p);
+        div.appendChild(r);
+        flaggedList.appendChild(div);
+      });
+    } else {
+      const p = document.createElement('p');
+      p.className = 'no-flags';
+      p.textContent = 'No spammy phrases detected — nice and clean.';
+      flaggedList.appendChild(p);
+    }
+    spamCard.classList.add('show');
+  }
 
   copyBtn.addEventListener('click', () => {
     navigator.clipboard.writeText(resultBody.textContent).then(() => {
@@ -324,6 +449,7 @@
     btn.classList.add('loading');
     btn.disabled = true;
     resultCard.classList.remove('show');
+    spamCard.classList.remove('show');
 
     try {
       // Calls your own backend (api/refine.js) — it holds the API key, not this page.
@@ -339,6 +465,7 @@
         throw new Error(parsed.error || "Request failed: " + response.status);
       }
 
+      renderSpamCheck(parsed.spam_score, parsed.flagged_phrases);
       resultBody.textContent = parsed.refined_email || "(no output)";
       resultNotes.innerHTML = parsed.notes ? ("<strong>What changed: </strong>" + parsed.notes) : "";
       resultCard.classList.add('show');
